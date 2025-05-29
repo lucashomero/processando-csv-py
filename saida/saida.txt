@@ -1,0 +1,6 @@
+ # Resultados gerados pelo código como 
+
+│   ├── Consolidado.csv
+│   ├── ResumoMetas.csv
+│   ├── grafico.png
+│   └── tempos_execucao.csv 

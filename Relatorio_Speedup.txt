@@ -1,0 +1,1 @@
+ # Análise do speedup e gráficos
