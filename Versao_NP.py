@@ -1,197 +1,345 @@
 import pandas as pd
+import matplotlib.pyplot as plt
 import glob
 import os
 
 # --- Configurações Iniciais ---
-pasta_dos_csvs = "./Dados"
-nome_arquivo_consolidado = "Consolidado.csv"
-nome_arquivo_resumo_metas = "ResumoMetas.csv"
+PASTA_DOS_CSVS = "./Dados"
+PASTA_SAIDA = "./Saida"  # Nova configuração para a pasta de saída
+NOME_ARQUIVO_CONSOLIDADO = "Consolidado.csv"
+NOME_ARQUIVO_RESUMO_METAS = "ResumoMetas.csv"
+NOME_GRAFICO_EXEMPLO = "grafico_exemplo_meta1.png"
+
+
+# Nomes das colunas nos CSVs de dados, baseados na descrição da Meta 1
+COL_JULGADOS = 'julgados_2025'
+COL_CASOS_NOVOS = 'casos_novos_2025'  # Usado para cnm1 e genericamente para dismX
+COL_DESSOBRESTADOS = 'dessobrestados_2025'
+COL_SUSPENSOS = 'suspensos_2025'
+
+# Lista de todas as colunas de metas possíveis para o arquivo ResumoMetas.csv
+ALL_META_COLUMNS = [
+    'tribunal', 'ramo_justica', 'Meta1', 'Meta2A', 'Meta2B', 'Meta2C', 'Meta2ANT',
+    'Meta4A', 'Meta4B', 'Meta6', 'Meta7A', 'Meta7B', 'Meta8A', 'Meta8B', 'Meta8',
+    'Meta10A', 'Meta10B', 'Meta10'
+]
 
 # --- 1. Leitura e Consolidação dos CSVs (Gerar Consolidado.csv) ---
-def consolidar_csvs(caminho_pasta, arquivo_saida):
+def consolidar_csvs(caminho_pasta_dados, caminho_arquivo_saida_consolidado):
     """
-    Lê todos os arquivos CSV de uma pasta, consolida-os em um único DataFrame
-    e salva em um novo arquivo CSV.
+    Lê todos os arquivos CSV de uma pasta que correspondem ao padrão 'teste_*.csv',
+    consolida-os em um único DataFrame e salva em um novo arquivo CSV.
     """
-    arquivos_csv = glob.glob(os.path.join(caminho_pasta, "teste_*.csv")) # Pega todos os arquivos que começam com 'teste_' e terminam com '.csv'
-    
+    arquivos_csv = glob.glob(os.path.join(caminho_pasta_dados, "teste_*.csv"))
     if not arquivos_csv:
-        print(f"Nenhum arquivo CSV encontrado na pasta: {caminho_pasta}")
+        print(f"Nenhum arquivo CSV encontrado no padrão 'teste_*.csv' na pasta: {caminho_pasta_dados}")
         return None
 
     lista_de_dfs = []
     for arquivo in arquivos_csv:
         try:
-            # Dica: Verifique as opções do read_csv conforme o seu arquivo [cite: 99]
-            # Ex: separador, encoding
-            df_temp = pd.read_csv(arquivo, sep=',', encoding='utf-8') # Ajuste sep e encoding se necessário
-            # Adicionar uma coluna para identificar a origem, se útil (opcional)
-            # df_temp['origem_arquivo'] = os.path.basename(arquivo)
+            df_temp = pd.read_csv(arquivo, sep=',', encoding='utf-8')
+            if 'sigla_tribunal' not in df_temp.columns or 'ramo_justica' not in df_temp.columns:
+                print(f"Alerta: Arquivo {arquivo} não contém 'sigla_tribunal' ou 'ramo_justica'. O processamento pode falhar.")
             lista_de_dfs.append(df_temp)
             print(f"Arquivo {arquivo} lido com sucesso.")
         except Exception as e:
             print(f"Erro ao ler o arquivo {arquivo}: {e}")
-            
+
     if not lista_de_dfs:
         print("Nenhum DataFrame para concatenar.")
         return None
 
-    # Concatena todos os DataFrames da lista [cite: 100, 101]
     df_consolidado = pd.concat(lista_de_dfs, ignore_index=True)
-    
     try:
-        df_consolidado.to_csv(arquivo_saida, index=False, sep=',', encoding='utf-8') # Salva o CSV consolidado [cite: 107, 109]
-        print(f"Arquivo consolidado '{arquivo_saida}' gerado com sucesso com {len(df_consolidado)} linhas.")
+        df_consolidado.to_csv(caminho_arquivo_saida_consolidado, index=False, sep=',', encoding='utf-8')
+        print(f"Arquivo consolidado '{caminho_arquivo_saida_consolidado}' gerado com sucesso com {len(df_consolidado)} linhas.")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo consolidado: {e}")
-        
+        print(f"Erro ao salvar o arquivo consolidado '{caminho_arquivo_saida_consolidado}': {e}")
     return df_consolidado
 
-# --- 2. Cálculo das Metas ---
-# As fórmulas das metas estão no documento (Capítulo 3)
-# Exemplo: Meta 1 [cite: 38, 44, 51, 57, 61, 65, 68, 74]
-# Meta1 = (Σ julgadom1 / (Σ cnm1 + Σ desm1 - Σ susm1)) * 100
-# Onde cnm1 é 'casos_novos_2025', julgadom1 é 'julgados_2025', etc.
+# --- 2. Funções Auxiliares para Cálculo de Metas ---
+def calcular_meta_tipo_1(df_tribunal):
+    """
+    Calcula metas com a fórmula: (Σ julgados / (Σ casos_novos + Σ dessobrestados - Σ suspensos)) * 100
+    Aplicável à Meta 1 de todos os tribunais.
+    """
+    soma_julgados = df_tribunal[COL_JULGADOS].sum()
+    soma_casos_novos = df_tribunal[COL_CASOS_NOVOS].sum()
+    soma_dessobrestados = df_tribunal[COL_DESSOBRESTADOS].sum()
+    soma_suspensos = df_tribunal[COL_SUSPENSOS].sum()
 
-def calcular_meta1(df_tribunal):
-    """Calcula a Meta 1 para um DataFrame de um tribunal específico."""
-    # Assegure-se que as colunas existem e trate possíveis valores nulos (NaN)
-    # que podem atrapalhar a soma. O .sum() do pandas já ignora NaN por padrão.
-    soma_julgadom1 = df_tribunal['julgados_2025'].sum() # Nome da coluna conforme exemplo da Meta 1
-    soma_cnm1 = df_tribunal['casos_novos_2025'].sum()
-    soma_desm1 = df_tribunal['dessobrestados_2025'].sum()
-    soma_susm1 = df_tribunal['suspensos_2025'].sum()
-    
-    denominador = soma_cnm1 + soma_desm1 - soma_susm1
+    denominador = soma_casos_novos + soma_dessobrestados - soma_suspensos
     if denominador == 0:
-        return "NA" # Ou 0, ou alguma outra indicação de divisão por zero
-        
-    meta1_resultado = (soma_julgadom1 / denominador) * 100
-    return meta1_resultado
+        return "NA"
+    return (soma_julgados / denominador) * 100
 
-# Adicione funções para calcular as outras metas (Meta 2A, 2B, 4A, etc.)
-# Lembre-se que cada ramo de justiça tem um conjunto diferente de metas e fórmulas. [cite: 38, 41, 44, 47, 48, 51, 53, 57, 60, 61, 65, 68, 70, 74, 76]
+def calcular_meta_generica(df_tribunal, multiplicador):
+    """
+    Calcula metas com a fórmula: (Σ julgados / (Σ casos_novos - Σ suspensos)) * multiplicador
+    Onde 'casos_novos' representa o ΣdismX das fórmulas.
+    O multiplicador varia (ex: 100, ou 1000/fator_P).
+    """
+    soma_julgados = df_tribunal[COL_JULGADOS].sum()
+    soma_distribuidos = df_tribunal[COL_CASOS_NOVOS].sum() # dismX
+    soma_suspensos = df_tribunal[COL_SUSPENSOS].sum()    # susmX
 
-def processar_tribunais(df_dados_consolidados):
+    denominador = soma_distribuidos - soma_suspensos
+    if denominador == 0:
+        return "NA"
+    return (soma_julgados / denominador) * multiplicador
+
+# --- 3. Funções de Cálculo de Metas por Ramo da Justiça ---
+
+def calcular_metas_justica_estadual(df_tribunal):
+    """Calcula todas as metas aplicáveis à Justiça Estadual."""
+    resultados = {}
+    resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
+    resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/8))
+    resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
+    resultados['Meta2C'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
+    resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/6.5))
+    resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta6'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta7A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/5))
+    resultados['Meta7B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/5))
+    resultados['Meta8A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
+    resultados['Meta8B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
+    resultados['Meta10A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
+    resultados['Meta10B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/10))
+    return resultados
+
+def calcular_metas_justica_trabalho(df_tribunal):
+    """Calcula todas as metas aplicáveis à Justiça do Trabalho."""
+    resultados = {}
+    resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
+    resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.4))
+    resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7))
+    resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    return resultados
+
+def calcular_metas_justica_federal(df_tribunal):
+    """Calcula todas as metas aplicáveis à Justiça Federal."""
+    resultados = {}
+    resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
+    resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/8.5))
+    resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7))
+    resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta6'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/3.5))
+    resultados['Meta7A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/3.5))
+    resultados['Meta7B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/3.5))
+    resultados['Meta8A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
+    resultados['Meta8B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
+    resultados['Meta10A'] = calcular_meta_generica(df_tribunal, multiplicador=100) # Meta 10 PDF (10A nosso)
+    return resultados
+
+def calcular_metas_justica_militar_uniao(df_tribunal):
+    """Calcula todas as metas aplicáveis à Justiça Militar da União."""
+    resultados = {}
+    resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
+    resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
+    resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.9))
+    resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
+    resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.9))
+    return resultados
+
+def calcular_metas_justica_militar_estadual(df_tribunal):
+    """Calcula todas as metas aplicáveis à Justiça Militar Estadual."""
+    resultados = {}
+    resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
+    resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
+    resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
+    resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
+    # PDF JME Meta 4B: "Identificar e julgar 95%..." mas fórmula "...x(1000/9,9)". Usando a fórmula.
+    resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.9))
+    return resultados
+
+def calcular_metas_tribunal_superior_eleitoral(df_tribunal):
+    """Calcula todas as metas aplicáveis ao Tribunal Superior Eleitoral."""
+    resultados = {}
+    resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
+    resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7))
+    # PDF TSE Meta 2B: "Identificar e julgar 100%..." mas fórmula "...x(1000/9,9)". Usando a fórmula.
+    resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.9))
+    resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
+    resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/5))
+    return resultados
+
+def calcular_metas_tribunal_superior_trabalho(df_tribunal):
+    """Calcula todas as metas aplicáveis ao Tribunal Superior do Trabalho."""
+    resultados = {}
+    resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
+    # PDF TST Meta 2A: "Identificar e julgar pelo menos 85%..." mas fórmula "...x(1000/9,5)". Usando a fórmula (95%).
+    resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
+    # PDF TST Meta 2B: "Identificar e julgar 100%..." mas fórmula "...x(1000/9,9)". Usando a fórmula (99%).
+    resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.9))
+    resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7))
+    resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    return resultados
+
+def calcular_metas_superior_tribunal_justica(df_tribunal):
+    """Calcula todas as metas aplicáveis ao Superior Tribunal de Justiça."""
+    resultados = {}
+    resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
+    resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
+    resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=100)
+    resultados['Meta6'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
+    resultados['Meta7A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
+    resultados['Meta7B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
+    resultados['Meta8'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/10)) # Meta 8 combinada
+    resultados['Meta10'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/10)) # Meta 10 (Sequestro Int.)
+    return resultados
+
+# --- 4. Processamento Principal dos Tribunais ---
+def processar_tribunais(df_dados_consolidados, caminho_arquivo_saida_resumo):
     """
-    Processa os dados consolidados para calcular as metas de cada tribunal
-    e retorna um DataFrame com os resultados.
+    Processa os dados consolidados para calcular as metas de cada tribunal,
+    chama a função de cálculo apropriada baseada no 'ramo_justica' e
+    salva os resultados em um arquivo CSV.
     """
-    if df_dados_consolidados is None:
+    if df_dados_consolidados is None or df_dados_consolidados.empty:
         print("DataFrame consolidado está vazio. Não é possível processar tribunais.")
         return None
 
-    # A coluna 'ramo_justica' identificará o tipo de justiça [cite: 91]
-    # Você precisará agrupar ou iterar por tribunal.
-    # Supondo que haja uma coluna 'sigla_tribunal' ou similar para agrupar.
-    # Se não houver, você pode precisar inferir dos nomes dos arquivos ou outra coluna.
-    
-    resultados_metas = []
-
-    # Exemplo de como iterar se você tiver uma coluna que identifica unicamente cada tribunal
-    # Este é um PONTO CRÍTICO: você precisa de uma coluna para agrupar os dados POR TRIBUNAL
-    # antes de aplicar as somas das metas. O `glob.glob` acima pega arquivos que parecem ser por tribunal.
-    # Se cada arquivo CSV já é um tribunal, e a consolidação mantém isso distinguível
-    # (ex: se 'sigla_tribunal' ou 'ramo_justica' + 'nome_tribunal' for único),
-    # então você pode agrupar por essa(s) chave(s).
-
-    # Supondo que 'sigla_tribunal' seja a coluna identificadora
     if 'sigla_tribunal' not in df_dados_consolidados.columns:
-        print("Coluna 'sigla_tribunal' não encontrada. Adapte esta parte do código.")
-        # Alternativa: se cada arquivo original representa um tribunal, você pode precisar
-        # processar cada df_temp DENTRO do loop de consolidação_csvs antes de concatenar,
-        # ou adicionar uma coluna 'nome_tribunal_origem' durante a leitura.
-        return None # Ou implemente a lógica de agrupamento correta
+        print("Erro: Coluna 'sigla_tribunal' não encontrada no DataFrame consolidado.")
+        return None
+    if 'ramo_justica' not in df_dados_consolidados.columns:
+        print("Erro: Coluna 'ramo_justica' não encontrada no DataFrame consolidado.")
+        return None
 
-    for tribunal_nome, df_tribunal in df_dados_consolidados.groupby('sigla_tribunal'):
-        print(f"Processando tribunal: {tribunal_nome}")
-        
-        ramo_justica = df_tribunal['ramo_justica'].iloc[0] # Pega o ramo de justiça do tribunal
-        
-        desempenho_tribunal = {'tribunal': tribunal_nome, 'ramo_justica': ramo_justica}
-        
-        # --- Aqui você chamaria as funções de cálculo de meta ---
-        # --- de acordo com o `ramo_justica` ---
-        
-        # Exemplo genérico (PRECISA SER ADAPTADO POR RAMO DE JUSTIÇA)
-        desempenho_tribunal['Meta1'] = calcular_meta1(df_tribunal.copy()) # Envia uma cópia para evitar SettingWithCopyWarning
+    resultados_gerais = []
 
-        # Adicione outras metas aqui. Ex:
-        # if ramo_justica == "Justiça Estadual":
-        #     desempenho_tribunal['Meta2A_JE'] = calcular_meta2a_je(df_tribunal.copy())
-        #     desempenho_tribunal['Meta4A_JE'] = calcular_meta4a_je(df_tribunal.copy())
-        # elif ramo_justica == "Justiça do Trabalho":
-        #     desempenho_tribunal['Meta2A_JT'] = calcular_meta2a_jt(df_tribunal.copy())
-        #     # ... e assim por diante
-        # else: # Lógica para outros ramos ou metas comuns
-        #     pass
-            
-        # Preencher com 'NA' as metas não aplicáveis [cite: 87]
-        # (Isso pode ser feito definindo um conjunto de todas as colunas de metas possíveis
-        # e preenchendo as que não foram calculadas com 'NA')
+    for tribunal_sigla, df_tribunal_especifico in df_dados_consolidados.groupby('sigla_tribunal'):
+        print(f"Processando tribunal: {tribunal_sigla}")
+        ramo = df_tribunal_especifico['ramo_justica'].iloc[0]
+        desempenho_tribunal = {'tribunal': tribunal_sigla, 'ramo_justica': ramo}
+        calculated_metas = {}
+        df_copy = df_tribunal_especifico.copy()
 
-        resultados_metas.append(desempenho_tribunal)
-        
-    df_resultados_metas = pd.DataFrame(resultados_metas)
-    
-    # Preencher colunas de metas faltantes com "NA"
-    # Ex: todas_as_colunas_de_metas = ['Meta1', 'Meta2A_JE', 'Meta2A_JT', ...]
-    # for col in todas_as_colunas_de_metas:
-    #    if col not in df_resultados_metas.columns:
-    #        df_resultados_metas[col] = "NA"
-            
+        if ramo == "Justiça Estadual":
+            calculated_metas = calcular_metas_justica_estadual(df_copy)
+        elif ramo == "Justiça do Trabalho":
+            calculated_metas = calcular_metas_justica_trabalho(df_copy)
+        elif ramo == "Justiça Federal":
+            calculated_metas = calcular_metas_justica_federal(df_copy)
+        elif ramo == "Justiça Militar da União":
+            calculated_metas = calcular_metas_justica_militar_uniao(df_copy)
+        elif ramo == "Justiça Militar Estadual":
+            calculated_metas = calcular_metas_justica_militar_estadual(df_copy)
+        elif ramo == "Tribunal Superior Eleitoral":
+             calculated_metas = calcular_metas_tribunal_superior_eleitoral(df_copy)
+        elif ramo == "Tribunal Superior do Trabalho":
+             calculated_metas = calcular_metas_tribunal_superior_trabalho(df_copy)
+        elif ramo == "Superior Tribunal de Justiça":
+             calculated_metas = calcular_metas_superior_tribunal_justica(df_copy)
+        else:
+            print(f"Alerta: Ramo de justiça '{ramo}' para o tribunal '{tribunal_sigla}' não possui função de cálculo de metas definida.")
+            desempenho_tribunal['Meta1'] = calcular_meta_tipo_1(df_copy) # Default to Meta1 if specific branch function is missing
+
+        desempenho_tribunal.update(calculated_metas)
+        resultados_gerais.append(desempenho_tribunal)
+
+    df_resumo_metas = pd.DataFrame(resultados_gerais)
+    cols_ordenadas = ['tribunal', 'ramo_justica'] + [m for m in ALL_META_COLUMNS if m not in ['tribunal', 'ramo_justica']]
+    df_resumo_metas = df_resumo_metas.reindex(columns=cols_ordenadas).fillna("NA")
+
     try:
-        df_resultados_metas.to_csv(nome_arquivo_resumo_metas, index=False, sep=',', encoding='utf-8')
-        print(f"Arquivo de resumo de metas '{nome_arquivo_resumo_metas}' gerado com sucesso.")
+        df_resumo_metas.to_csv(caminho_arquivo_saida_resumo, index=False, sep=',', encoding='utf-8')
+        print(f"Arquivo de resumo de metas '{caminho_arquivo_saida_resumo}' gerado com sucesso.")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo de resumo de metas: {e}")
-        
-    return df_resultados_metas
+        print(f"Erro ao salvar o arquivo de resumo de metas '{caminho_arquivo_saida_resumo}': {e}")
+    return df_resumo_metas
 
-# --- 3. Geração de Gráficos ---
-def gerar_graficos(df_resumo):
+# --- 5. Geração de Gráficos (Implementação Pendente) ---
+def gerar_graficos(df_resumo, pasta_saida_graficos):
     """
-    Gera gráficos comparativos do desempenho dos tribunais.
-    (Esta é uma tarefa mais elaborada, comece com algo simples)
+    Gera gráficos de barras comparativos para um conjunto selecionado de metas.
     """
     if df_resumo is None or df_resumo.empty:
-        print("DataFrame de resumo vazio. Não é possível gerar gráficos.")
+        print("DataFrame de resumo vazio ou nulo. Não é possível gerar gráficos.")
         return
 
-    try:
-        import matplotlib.pyplot as plt
-        # Exemplo: Gráfico de barras para a Meta 1 para alguns tribunais
-        # df_resumo_filtrado = df_resumo.dropna(subset=['Meta1']) # Remove NAs para o gráfico
-        # df_resumo_filtrado = df_resumo_filtrado[df_resumo_filtrado['Meta1'] != 'NA']
-        # df_resumo_filtrado['Meta1'] = pd.to_numeric(df_resumo_filtrado['Meta1'])
-        
-        # df_resumo_filtrado.head(10).plot(kind='bar', x='tribunal', y='Meta1')
-        # plt.title('Desempenho Meta 1 (Top 10 Tribunais)')
-        # plt.ylabel('Percentual Atingido (%)')
-        # plt.xticks(rotation=45, ha="right")
-        # plt.tight_layout()
-        # plt.savefig("grafico_meta1.png")
-        # print("Gráfico 'grafico_meta1.png' salvo.")
-        print("Funcionalidade de gráfico a ser implementada.")
+    if not os.path.exists(pasta_saida_graficos):
+        try:
+            os.makedirs(pasta_saida_graficos, exist_ok=True)
+            print(f"Pasta para gráficos '{pasta_saida_graficos}' criada.")
+        except OSError as e:
+            print(f"Erro ao criar diretório para gráficos '{pasta_saida_graficos}': {e}. Gráficos não serão salvos.")
+            return
 
-    except ImportError:
-        print("Biblioteca matplotlib não encontrada. Instale com 'pip install matplotlib'")
-    except Exception as e:
-        print(f"Erro ao gerar gráfico: {e}")
+    metas_para_plotar = ['Meta1', 'Meta2A', 'Meta2ANT', 'Meta4A', 'Meta6']
+    num_tribunais_top = 15 # Limitar o número de tribunais no gráfico para melhor visualização
+
+    for meta_nome in metas_para_plotar:
+        if meta_nome not in df_resumo.columns:
+            print(f"Meta '{meta_nome}' não encontrada no DataFrame de resumo. Pulando gráfico.")
+            continue
+
+        print(f"Gerando gráfico para {meta_nome}...")
+        df_para_plot = df_resumo[['tribunal', meta_nome]].copy()
+        df_para_plot[meta_nome] = pd.to_numeric(df_para_plot[meta_nome], errors='coerce')
+        df_para_plot = df_para_plot.dropna(subset=[meta_nome])
+        df_para_plot = df_para_plot.sort_values(by=meta_nome, ascending=False).head(num_tribunais_top)
+
+        if not df_para_plot.empty:
+            plt.figure(figsize=(14, 8)) # Ajustado para melhor visualização
+            bars = plt.bar(df_para_plot['tribunal'], df_para_plot[meta_nome])
+            plt.title(f'Desempenho - {meta_nome} (Top {num_tribunais_top} Tribunais)', fontsize=16)
+            plt.ylabel(f'Valor da {meta_nome}', fontsize=12)
+            plt.xlabel('Tribunal', fontsize=12)
+            plt.xticks(rotation=45, ha="right", fontsize=10)
+            plt.yticks(fontsize=10)
+            plt.grid(axis='y', linestyle='--')
+
+            # Adicionar valores no topo das barras
+            for bar in bars:
+                yval = bar.get_height()
+                plt.text(bar.get_x() + bar.get_width()/2.0, yval + 0.01 * df_para_plot[meta_nome].max(), # Posição do texto
+                         f'{yval:.2f}', ha='center', va='bottom', fontsize=9)
+
+
+            plt.tight_layout()
+            caminho_arquivo_grafico = os.path.join(pasta_saida_graficos, f"grafico_{meta_nome}.png")
+            try:
+                plt.savefig(caminho_arquivo_grafico)
+                print(f"Gráfico '{caminho_arquivo_grafico}' salvo com sucesso.")
+            except Exception as e:
+                print(f"Erro ao salvar o gráfico '{caminho_arquivo_grafico}': {e}")
+            plt.close() # Fechar a figura para liberar memória
+        else:
+            print(f"Não há dados válidos para '{meta_nome}' para gerar o gráfico.")
+    print("Geração de gráficos concluída.")
 
 # --- Função Principal (Main) ---
 if __name__ == "__main__":
-    print("Iniciando processamento...")
-    
-    # 1. Consolidar todos os CSVs de dados
-    df_consolidado = consolidar_csvs(pasta_dos_csvs, nome_arquivo_consolidado)
-    
-    # 2. Calcular as metas para cada tribunal
-    # df_consolidado_teste = pd.read_csv(nome_arquivo_consolidado) # Se quiser testar a partir do consolidado
-    df_resumo_das_metas = processar_tribunais(df_consolidado) 
-    
-    # 3. Gerar o gráfico comparativo
+    print("Iniciando processamento (Versao_NP.py)...")
+
+    try:
+        os.makedirs(PASTA_SAIDA, exist_ok=True)
+        print(f"Pasta de saída '{PASTA_SAIDA}' verificada/criada.")
+    except OSError as e:
+        print(f"Erro ao criar diretório de saída '{PASTA_SAIDA}': {e}")
+
+    caminho_consolidado = os.path.join(PASTA_SAIDA, NOME_ARQUIVO_CONSOLIDADO)
+    caminho_resumo_metas = os.path.join(PASTA_SAIDA, NOME_ARQUIVO_RESUMO_METAS)
+
+    df_consolidado = consolidar_csvs(PASTA_DOS_CSVS, caminho_consolidado)
+    df_resumo_das_metas = processar_tribunais(df_consolidado, caminho_resumo_metas)
+
     if df_resumo_das_metas is not None:
-        gerar_graficos(df_resumo_das_metas)
-        
+        # A função gerar_graficos agora recebe a pasta de saída diretamente
+        gerar_graficos(df_resumo_das_metas, PASTA_SAIDA)
+    else:
+        print("Não foi possível gerar gráficos pois o resumo das metas não foi criado.")
+
     print("Processamento concluído.")

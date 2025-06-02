@@ -175,3 +175,4 @@ cython_debug/
 
 # Não subir aquivos de dados
 teste_*.csv
+Saida/
