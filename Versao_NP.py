@@ -2,22 +2,20 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import glob
 import os
+import time
 
 # --- Configurações Iniciais ---
 PASTA_DOS_CSVS = "./Dados"
-PASTA_SAIDA = "./Saida"  # Nova configuração para a pasta de saída
+PASTA_SAIDA = "./Saida"
 NOME_ARQUIVO_CONSOLIDADO = "Consolidado.csv"
 NOME_ARQUIVO_RESUMO_METAS = "ResumoMetas.csv"
 NOME_GRAFICO_EXEMPLO = "grafico_exemplo_meta1.png"
 
-
-# Nomes das colunas nos CSVs de dados, baseados na descrição da Meta 1
 COL_JULGADOS = 'julgados_2025'
-COL_CASOS_NOVOS = 'casos_novos_2025'  # Usado para cnm1 e genericamente para dismX
+COL_CASOS_NOVOS = 'casos_novos_2025'
 COL_DESSOBRESTADOS = 'dessobrestados_2025'
 COL_SUSPENSOS = 'suspensos_2025'
 
-# Lista de todas as colunas de metas possíveis para o arquivo ResumoMetas.csv
 ALL_META_COLUMNS = [
     'tribunal', 'ramo_justica', 'Meta1', 'Meta2A', 'Meta2B', 'Meta2C', 'Meta2ANT',
     'Meta4A', 'Meta4B', 'Meta6', 'Meta7A', 'Meta7B', 'Meta8A', 'Meta8B', 'Meta8',
@@ -81,8 +79,8 @@ def calcular_meta_generica(df_tribunal, multiplicador):
     O multiplicador varia (ex: 100, ou 1000/fator_P).
     """
     soma_julgados = df_tribunal[COL_JULGADOS].sum()
-    soma_distribuidos = df_tribunal[COL_CASOS_NOVOS].sum() # dismX
-    soma_suspensos = df_tribunal[COL_SUSPENSOS].sum()    # susmX
+    soma_distribuidos = df_tribunal[COL_CASOS_NOVOS].sum()
+    soma_suspensos = df_tribunal[COL_SUSPENSOS].sum()
 
     denominador = soma_distribuidos - soma_suspensos
     if denominador == 0:
@@ -90,7 +88,6 @@ def calcular_meta_generica(df_tribunal, multiplicador):
     return (soma_julgados / denominador) * multiplicador
 
 # --- 3. Funções de Cálculo de Metas por Ramo da Justiça ---
-
 def calcular_metas_justica_estadual(df_tribunal):
     """Calcula todas as metas aplicáveis à Justiça Estadual."""
     resultados = {}
@@ -134,7 +131,7 @@ def calcular_metas_justica_federal(df_tribunal):
     resultados['Meta7B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/3.5))
     resultados['Meta8A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
     resultados['Meta8B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
-    resultados['Meta10A'] = calcular_meta_generica(df_tribunal, multiplicador=100) # Meta 10 PDF (10A nosso)
+    resultados['Meta10A'] = calcular_meta_generica(df_tribunal, multiplicador=100)
     return resultados
 
 def calcular_metas_justica_militar_uniao(df_tribunal):
@@ -156,7 +153,6 @@ def calcular_metas_justica_militar_estadual(df_tribunal):
     resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
     resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
     resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
-    # PDF JME Meta 4B: "Identificar e julgar 95%..." mas fórmula "...x(1000/9,9)". Usando a fórmula.
     resultados['Meta4B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.9))
     return resultados
 
@@ -165,7 +161,6 @@ def calcular_metas_tribunal_superior_eleitoral(df_tribunal):
     resultados = {}
     resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
     resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7))
-    # PDF TSE Meta 2B: "Identificar e julgar 100%..." mas fórmula "...x(1000/9,9)". Usando a fórmula.
     resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.9))
     resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
     resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9))
@@ -176,9 +171,7 @@ def calcular_metas_tribunal_superior_trabalho(df_tribunal):
     """Calcula todas as metas aplicáveis ao Tribunal Superior do Trabalho."""
     resultados = {}
     resultados['Meta1'] = calcular_meta_tipo_1(df_tribunal)
-    # PDF TST Meta 2A: "Identificar e julgar pelo menos 85%..." mas fórmula "...x(1000/9,5)". Usando a fórmula (95%).
     resultados['Meta2A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.5))
-    # PDF TST Meta 2B: "Identificar e julgar 100%..." mas fórmula "...x(1000/9,9)". Usando a fórmula (99%).
     resultados['Meta2B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/9.9))
     resultados['Meta2ANT'] = calcular_meta_generica(df_tribunal, multiplicador=100)
     resultados['Meta4A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7))
@@ -195,8 +188,8 @@ def calcular_metas_superior_tribunal_justica(df_tribunal):
     resultados['Meta6'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
     resultados['Meta7A'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
     resultados['Meta7B'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/7.5))
-    resultados['Meta8'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/10)) # Meta 8 combinada
-    resultados['Meta10'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/10)) # Meta 10 (Sequestro Int.)
+    resultados['Meta8'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/10))
+    resultados['Meta10'] = calcular_meta_generica(df_tribunal, multiplicador=(1000/10))
     return resultados
 
 # --- 4. Processamento Principal dos Tribunais ---
@@ -244,7 +237,7 @@ def processar_tribunais(df_dados_consolidados, caminho_arquivo_saida_resumo):
              calculated_metas = calcular_metas_superior_tribunal_justica(df_copy)
         else:
             print(f"Alerta: Ramo de justiça '{ramo}' para o tribunal '{tribunal_sigla}' não possui função de cálculo de metas definida.")
-            desempenho_tribunal['Meta1'] = calcular_meta_tipo_1(df_copy) # Default to Meta1 if specific branch function is missing
+            desempenho_tribunal['Meta1'] = calcular_meta_tipo_1(df_copy)
 
         desempenho_tribunal.update(calculated_metas)
         resultados_gerais.append(desempenho_tribunal)
@@ -260,7 +253,7 @@ def processar_tribunais(df_dados_consolidados, caminho_arquivo_saida_resumo):
         print(f"Erro ao salvar o arquivo de resumo de metas '{caminho_arquivo_saida_resumo}': {e}")
     return df_resumo_metas
 
-# --- 5. Geração de Gráficos (Implementação Pendente) ---
+# --- 5. Geração de Gráficos ---
 def gerar_graficos(df_resumo, pasta_saida_graficos):
     """
     Gera gráficos de barras comparativos para um conjunto selecionado de metas.
@@ -278,7 +271,7 @@ def gerar_graficos(df_resumo, pasta_saida_graficos):
             return
 
     metas_para_plotar = ['Meta1', 'Meta2A', 'Meta2ANT', 'Meta4A', 'Meta6']
-    num_tribunais_top = 15 # Limitar o número de tribunais no gráfico para melhor visualização
+    num_tribunais_top = 15
 
     for meta_nome in metas_para_plotar:
         if meta_nome not in df_resumo.columns:
@@ -292,7 +285,7 @@ def gerar_graficos(df_resumo, pasta_saida_graficos):
         df_para_plot = df_para_plot.sort_values(by=meta_nome, ascending=False).head(num_tribunais_top)
 
         if not df_para_plot.empty:
-            plt.figure(figsize=(14, 8)) # Ajustado para melhor visualização
+            plt.figure(figsize=(14, 8))
             bars = plt.bar(df_para_plot['tribunal'], df_para_plot[meta_nome])
             plt.title(f'Desempenho - {meta_nome} (Top {num_tribunais_top} Tribunais)', fontsize=16)
             plt.ylabel(f'Valor da {meta_nome}', fontsize=12)
@@ -301,12 +294,10 @@ def gerar_graficos(df_resumo, pasta_saida_graficos):
             plt.yticks(fontsize=10)
             plt.grid(axis='y', linestyle='--')
 
-            # Adicionar valores no topo das barras
             for bar in bars:
                 yval = bar.get_height()
                 plt.text(bar.get_x() + bar.get_width()/2.0, yval + 0.01 * df_para_plot[meta_nome].max(), # Posição do texto
                          f'{yval:.2f}', ha='center', va='bottom', fontsize=9)
-
 
             plt.tight_layout()
             caminho_arquivo_grafico = os.path.join(pasta_saida_graficos, f"grafico_{meta_nome}.png")
@@ -315,13 +306,14 @@ def gerar_graficos(df_resumo, pasta_saida_graficos):
                 print(f"Gráfico '{caminho_arquivo_grafico}' salvo com sucesso.")
             except Exception as e:
                 print(f"Erro ao salvar o gráfico '{caminho_arquivo_grafico}': {e}")
-            plt.close() # Fechar a figura para liberar memória
+            plt.close()
         else:
             print(f"Não há dados válidos para '{meta_nome}' para gerar o gráfico.")
     print("Geração de gráficos concluída.")
 
 # --- Função Principal (Main) ---
 if __name__ == "__main__":
+    t1 = time.time()
     print("Iniciando processamento (Versao_NP.py)...")
 
     try:
@@ -337,9 +329,10 @@ if __name__ == "__main__":
     df_resumo_das_metas = processar_tribunais(df_consolidado, caminho_resumo_metas)
 
     if df_resumo_das_metas is not None:
-        # A função gerar_graficos agora recebe a pasta de saída diretamente
         gerar_graficos(df_resumo_das_metas, PASTA_SAIDA)
     else:
         print("Não foi possível gerar gráficos pois o resumo das metas não foi criado.")
 
     print("Processamento concluído.")
+    t2 = time.time()
+    print(f"Tempo de execução: {t2 - t1:.2f} segundos.")
