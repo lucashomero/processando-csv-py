@@ -28,6 +28,7 @@ def consolidar_csvs(caminho_pasta_dados, caminho_arquivo_saida_consolidado):
     Lê todos os arquivos CSV de uma pasta que correspondem ao padrão 'teste_*.csv',
     consolida-os em um único DataFrame e salva em um novo arquivo CSV.
     """
+    t1 = time.time()
     arquivos_csv = glob.glob(os.path.join(caminho_pasta_dados, "teste_*.csv"))
     if not arquivos_csv:
         print(f"Nenhum arquivo CSV encontrado no padrão 'teste_*.csv' na pasta: {caminho_pasta_dados}")
@@ -54,6 +55,8 @@ def consolidar_csvs(caminho_pasta_dados, caminho_arquivo_saida_consolidado):
         print(f"Arquivo consolidado '{caminho_arquivo_saida_consolidado}' gerado com sucesso com {len(df_consolidado)} linhas.")
     except Exception as e:
         print(f"Erro ao salvar o arquivo consolidado '{caminho_arquivo_saida_consolidado}': {e}")
+    t2 = time.time()
+    print(f"Tempo de execução (consolidar csvs): {t2 - t1} segundos")
     return df_consolidado
 
 # --- 2. Funções Auxiliares para Cálculo de Metas ---
@@ -199,6 +202,7 @@ def processar_tribunais(df_dados_consolidados, caminho_arquivo_saida_resumo):
     chama a função de cálculo apropriada baseada no 'ramo_justica' e
     salva os resultados em um arquivo CSV.
     """
+    t1 = time.time()
     if df_dados_consolidados is None or df_dados_consolidados.empty:
         print("DataFrame consolidado está vazio. Não é possível processar tribunais.")
         return None
@@ -251,6 +255,8 @@ def processar_tribunais(df_dados_consolidados, caminho_arquivo_saida_resumo):
         print(f"Arquivo de resumo de metas '{caminho_arquivo_saida_resumo}' gerado com sucesso.")
     except Exception as e:
         print(f"Erro ao salvar o arquivo de resumo de metas '{caminho_arquivo_saida_resumo}': {e}")
+    t2 = time.time()
+    print(f"Tempo de execução (processar tribunais): {t2 - t1:.2f} segundos")
     return df_resumo_metas
 
 # --- 5. Geração de Gráficos ---
@@ -258,6 +264,7 @@ def gerar_graficos(df_resumo, pasta_saida_graficos):
     """
     Gera gráficos de barras comparativos para um conjunto selecionado de metas.
     """
+    t1 = time.time()
     if df_resumo is None or df_resumo.empty:
         print("DataFrame de resumo vazio ou nulo. Não é possível gerar gráficos.")
         return
@@ -310,6 +317,8 @@ def gerar_graficos(df_resumo, pasta_saida_graficos):
         else:
             print(f"Não há dados válidos para '{meta_nome}' para gerar o gráfico.")
     print("Geração de gráficos concluída.")
+    t2 = time.time()
+    print(f"Tempo de execução (geração de gráficos): {t2 - t1:.2f} segundos.")
 
 # --- Função Principal (Main) ---
 if __name__ == "__main__":
@@ -335,4 +344,4 @@ if __name__ == "__main__":
 
     print("Processamento concluído.")
     t2 = time.time()
-    print(f"Tempo de execução: {t2 - t1:.2f} segundos.")
+    print(f"Tempo total de execução: {t2 - t1:.2f} segundos.") # 150.90 segundos
